@@ -1,7 +1,9 @@
+using NeNep.Domain.Abstractions;
+
 namespace NeNep.Domain.Entities;
 
 /// <summary>A grade level.</summary>
-public class Grade
+public class Grade : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -12,4 +14,7 @@ public class Grade
     public string Name { get; set; } = string.Empty;
 
     public ICollection<Class> Classes { get; set; } = new List<Class>();
+
+    /// <summary>Soft deletion. Only a grade with no class attached.</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
 }

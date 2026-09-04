@@ -211,6 +211,9 @@ model AcademicYear {
   enrollments Enrollment[]
   scores      ConductScore[]
 
+  /// Xoá mềm. Chỉ xoá được năm học chưa có học kỳ, tuần học, kỳ nghỉ hay lớp nào.
+  deletedAt DateTime?
+
   @@map("academic_years")
 }
 
@@ -228,6 +231,9 @@ model Term {
   scores      ConductScore[]
   alerts      ConductAlert[]
   adjustments ConductAdjustment[]
+
+  /// Xoá mềm. Chỉ xoá được học kỳ chưa sinh tuần học.
+  deletedAt DateTime?
 
   @@unique([yearId, code])
   @@map("terms")
@@ -305,6 +311,9 @@ model Grade {
   name    String /// "Khối 6"
   classes Class[]
 
+  /// Xoá mềm. Chỉ xoá được khối chưa có lớp nào.
+  deletedAt DateTime?
+
   @@map("grades")
 }
 
@@ -329,6 +338,9 @@ model Class {
   overrides       ClassViolationOverride[]
   alerts          ConductAlert[]
   auditLogs       AuditLog[]
+
+  /// Xoá mềm. Chỉ xoá được lớp chưa có học sinh và chưa có bản ghi vi phạm nào.
+  deletedAt DateTime?
 
   @@unique([yearId, code])
   @@index([homeroomTeacherId])

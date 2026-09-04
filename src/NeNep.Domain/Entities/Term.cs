@@ -1,7 +1,9 @@
+using NeNep.Domain.Abstractions;
+
 namespace NeNep.Domain.Entities;
 
 /// <summary>A term within an academic year.</summary>
-public class Term
+public class Term : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -23,4 +25,7 @@ public class Term
     public ICollection<ConductScore> Scores { get; set; } = new List<ConductScore>();
     public ICollection<ConductAlert> Alerts { get; set; } = new List<ConductAlert>();
     public ICollection<ConductAdjustment> Adjustments { get; set; } = new List<ConductAdjustment>();
+
+    /// <summary>Soft deletion. Only a term whose weeks have not been generated yet.</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
 }

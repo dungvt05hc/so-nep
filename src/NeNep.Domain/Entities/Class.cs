@@ -1,7 +1,9 @@
+using NeNep.Domain.Abstractions;
+
 namespace NeNep.Domain.Entities;
 
 /// <summary>A class belonging to one specific academic year.</summary>
-public class Class
+public class Class : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -31,4 +33,10 @@ public class Class
     public ICollection<ClassViolationOverride> Overrides { get; set; } = new List<ClassViolationOverride>();
     public ICollection<ConductAlert> Alerts { get; set; } = new List<ConductAlert>();
     public ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
+
+    /// <summary>
+    /// Soft deletion, for a class created by mistake. A class that already has students
+    /// or records is never deleted: everything downstream points at it.
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; set; }
 }

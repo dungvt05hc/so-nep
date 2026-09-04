@@ -17,9 +17,10 @@ namespace NeNep.Infrastructure.Persistence.Interceptors;
 /// no deletes, no soft deletes.
 /// </para>
 /// <para>
-/// SKELETON (Phase 0): CREATE, UPDATE and DELETE are covered, and soft deletes are
-/// recognised as deletes. The business-specific actions (APPROVE, LOCK_WEEK, PUBLISH,
-/// ISSUE_PARENT_CODE and so on) will be added as their features are built.
+/// CREATE, UPDATE and DELETE are derived from the change tracker, and soft deletes are
+/// recognised as deletes. A feature that needs a more precise action (GRANT_ACCOUNT,
+/// RESET_PASSWORD, LOCK_WEEK, APPROVE...) declares it through <see cref="IAuditScope"/>
+/// instead of writing an audit row itself.
 /// </para>
 /// </summary>
 public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
@@ -29,12 +30,31 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         WriteIndented = false,
     };
 
+    /// <summary>
+    /// Properties whose value must never be copied into the audit trail. A password hash
+    /// or a refresh-token hash in audit_logs would turn a read-only trail that many staff
+    /// can open into a second copy of the credential store.
+    /// </summary>
+    private static readonly HashSet<string> RedactedProperties =
+    [
+        "PasswordHash",
+        "RefreshHash",
+        "CodeHash",
+    ];
+
+    private const string RedactedValue = "***";
+
     private readonly IAuditContext _auditContext;
+    private readonly IAuditScope _auditScope;
     private readonly TimeProvider _timeProvider;
 
-    public AuditSaveChangesInterceptor(IAuditContext auditContext, TimeProvider timeProvider)
+    public AuditSaveChangesInterceptor(
+        IAuditContext auditContext,
+        IAuditScope auditScope,
+        TimeProvider timeProvider)
     {
         _auditContext = auditContext;
+        _auditScope = auditScope;
         _timeProvider = timeProvider;
     }
 
@@ -104,13 +124,14 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
     private AuditLog BuildLog(EntityEntry entry, DateTimeOffset now)
     {
-        var action = ResolveAction(entry);
+        var tagged = _auditScope.TryGet(entry.Entity, out var tag);
 
         return new AuditLog
         {
             ActorId = _auditContext.ActorId,
             ActorRole = _auditContext.ActorRole,
-            Action = action,
+            Action = tagged ? tag.Action : ResolveAction(entry),
+            Summary = tagged ? tag.Summary : null,
             Entity = entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name,
             EntityId = ResolveEntityId(entry),
             ClassId = ResolveClassId(entry),
@@ -191,7 +212,9 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 continue;
             }
 
-            values[property.Metadata.Name] = original ? property.OriginalValue : property.CurrentValue;
+            values[property.Metadata.Name] = RedactedProperties.Contains(property.Metadata.Name)
+                ? RedactedValue
+                : original ? property.OriginalValue : property.CurrentValue;
         }
 
         if (values.Count == 0)

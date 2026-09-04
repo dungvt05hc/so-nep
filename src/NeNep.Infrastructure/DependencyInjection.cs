@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using NeNep.Infrastructure.Auditing;
 using NeNep.Infrastructure.Persistence;
 using NeNep.Infrastructure.Persistence.Interceptors;
+using NeNep.Infrastructure.Security;
 using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 
@@ -27,6 +28,11 @@ public static class DependencyInjection
 
         // The API layer replaces this with an implementation backed by HttpContext.
         services.TryAddScoped<IAuditContext, NullAuditContext>();
+
+        // Lets a feature declare the business meaning of the write it is about to make.
+        services.TryAddScoped<IAuditScope, AuditScope>();
+
+        services.TryAddSingleton<IPasswordService, PasswordService>();
 
         services.AddScoped<TimestampInterceptor>();
         services.AddScoped<AuditSaveChangesInterceptor>();

@@ -1,7 +1,9 @@
+using NeNep.Domain.Abstractions;
+
 namespace NeNep.Domain.Entities;
 
 /// <summary>An academic year, for example "2026-2027".</summary>
-public class AcademicYear
+public class AcademicYear : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -20,4 +22,10 @@ public class AcademicYear
     public ICollection<Class> Classes { get; set; } = new List<Class>();
     public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
     public ICollection<ConductScore> Scores { get; set; } = new List<ConductScore>();
+
+    /// <summary>
+    /// Soft deletion. Only a year that has no term, week, break or class attached can be
+    /// deleted; anything further along is history and stays.
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; set; }
 }
