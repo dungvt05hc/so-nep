@@ -1,0 +1,28 @@
+# Postgres for local development.
+# Start:  docker compose up -d
+# Stop:   docker compose down          (keeps the data)
+#         docker compose down -v       (wipes the data)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: nenep-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nenep
+      POSTGRES_USER: nenep
+      POSTGRES_PASSWORD: nenep
+      # Needed for correct comparison and sorting of accented Vietnamese names.
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - nenep-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nenep -d nenep"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  nenep-pgdata:

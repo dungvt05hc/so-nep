@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NeNep.Domain\NeNep.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,856 @@
+// =============================================================================
+// HỆ THỐNG THEO DÕI NỀ NẾP — THCS
+// schema.prisma v0.1
+//
+// NGUYÊN TẮC BẤT DI BẤT DỊCH:
+//   Không có con số nào của quy chế (100, 90/60/30, ngưỡng 10/5/3 lần...)
+//   được phép xuất hiện trong code. Tất cả nằm ở SchoolSetting,
+//   ClassificationLevel và ConductRule.
+//
+// TRẠNG THÁI: 8 câu hỏi nghiệp vụ đã được nhà trường chốt (xem ghi chú
+// "CHỐT Qn" tại từng chỗ). Điểm quan trọng nhất: app KHÔNG tự hạ bậc
+// hạnh kiểm — chỉ phát cảnh báo (ConductAlert). Quyết định hạ bậc đến từ
+// cuộc họp BGH – GVCN – phụ huynh và được ghi vào ConductAdjustment.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================== ENUMS ========================================
+
+enum Role {
+  ADMIN // Quản trị trường
+  BGH // Ban giám hiệu — chỉ đọc toàn trường
+  GVCN // Giáo viên chủ nhiệm
+  LOP_TRUONG
+  PHO_HOC_TAP
+  PHO_LAO_DONG
+}
+
+enum CategoryKind {
+  KHEN_THUONG
+  NE_NEP
+  VE_SINH
+  HOC_TAP
+}
+
+enum ViolationStatus {
+  PENDING // Cán bộ lớp vừa nhập, chờ GVCN duyệt
+  APPROVED // Đã duyệt — được tính điểm
+  REJECTED // GVCN từ chối, bắt buộc có lý do
+  EXPIRED // Quá hạn duyệt, tự huỷ khi chốt tuần
+}
+
+enum RemediationStatus {
+  NOT_REQUIRED
+  PENDING
+  DONE
+  OVERDUE
+}
+
+enum WeekStatus {
+  OPEN // Đang trong tuần, cho phép nhập
+  PENDING_REVIEW // Hết tuần nhưng còn bản ghi chờ duyệt → chưa chốt được
+  LOCKED // Đã chốt, đã tính điểm, khoá sửa
+  PUBLISHED // Đã phát hành cho phụ huynh
+}
+
+enum RuleType {
+  IMMEDIATE // Cứ có 1 lần là áp dụng (N12, N13, H11)
+  THRESHOLD // Vượt ngưỡng đếm trong kỳ (N01 > 10 lần...)
+  REMEDIATION_TIMEOUT // Không khắc phục đúng hạn (N08 sau 3 ngày)
+  MANUAL // GVCN ghi nhận thủ công (B01, B02)
+}
+
+enum CompareOp {
+  GT // >   ("quá 10 lần" = > 10)
+  GTE // >=
+}
+
+enum RuleEffect {
+  DOWNGRADE // ĐỀ XUẤT hạ bậc — app không tự hạ, chỉ nhắc để đưa ra cuộc họp
+  UPGRADE // ĐỀ XUẤT tăng bậc
+  WARNING // Chỉ cảnh báo, không liên quan xếp loại (N04 > 45 buổi/năm)
+}
+
+/// Trạng thái một cảnh báo trong quy trình xử lý của nhà trường.
+enum AlertStatus {
+  APPROACHING // Sắp chạm ngưỡng — nhắc sớm để còn kịp uốn nắn
+  TRIGGERED // Đã vượt ngưỡng, chờ GVCN tiếp nhận
+  ACKNOWLEDGED // GVCN đã xem
+  IN_MEETING // Đã đưa vào lịch họp BGH – GVCN – phụ huynh
+  RESOLVED // Đã họp và có kết luận
+  DISMISSED // Bỏ qua, có ghi lý do
+}
+
+enum PeriodScope {
+  WEEK
+  TERM
+  YEAR
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  EXPIRE
+  LOCK_WEEK
+  UNLOCK_WEEK
+  PUBLISH
+  GRANT_ACCOUNT
+  REVOKE_ACCOUNT
+  RESET_PASSWORD
+  ISSUE_PARENT_CODE
+  REVOKE_PARENT_CODE
+  RAISE_ALERT
+  RESOLVE_ALERT
+  ADJUST_LEVEL
+  OVERRIDE_CATALOG
+  CONFIG_CHANGE
+  LOGIN
+  LOGIN_FAILED
+}
+
+// ============================== CẤU HÌNH =====================================
+
+/// Bảng cấu hình toàn trường. Chỉ có duy nhất 1 dòng (id = 1).
+model SchoolSetting {
+  id         Int    @id @default(1)
+  schoolName String
+  schoolCode String @default("")
+
+  // --- Công thức điểm ---
+  baseScore Int @default(100) /// Điểm khởi đầu mỗi tuần
+
+  /// CHỐT Q1: điểm cộng KHÔNG có trần. Giữ cột để đổi ý sau, mặc định null.
+  scoreCap Int?
+
+  /// CHỐT Q2: điểm ĐƯỢC PHÉP âm. null = không chặn sàn.
+  scoreFloor Int?
+
+  /// CHỐT Q3 + Q4: app KHÔNG tự hạ/tăng bậc. Việc hạ bậc do cuộc họp
+  /// BGH – GVCN – phụ huynh quyết định và ghi vào ConductAdjustment.
+  /// Bật cờ này chỉ khi nhà trường đổi chủ trương.
+  autoApplyLevelRules Boolean @default(false)
+
+  /// Nhắc sớm khi còn N lần nữa là chạm ngưỡng (sinh cảnh báo APPROACHING).
+  alertLeadCount Int @default(2)
+
+  /// CHỐT Q7: GVCN được tinh chỉnh bảng điểm của lớp mình.
+  /// false = chỉ được bật/tắt mã lỗi; true = được sửa cả mức điểm.
+  /// Để false thì số liệu 62 lớp mới so sánh được với nhau.
+  allowClassPointOverride Boolean @default(false)
+
+  /// CHỐT Q8: C07 vẫn cộng thêm dù đã cộng từng lần C01. Hệ thống tự cộng.
+  stackAutoBonus Boolean @default(true)
+
+  // --- Chốt tuần ---
+  lockDayOfWeek Int @default(0) /// 0 = Chủ nhật
+  lockHour      Int @default(20)
+  graceHours    Int @default(16) /// Ân hạn sau giờ chốt; hết hạn → PENDING thành EXPIRED
+
+  /// true = bản ghi quá hạn bị huỷ; false = tự động duyệt.
+  expirePendingOnLock Boolean @default(true)
+
+  // --- Phụ huynh ---
+  parentCodeLength     Int     @default(6)
+  parentMaxFailedTries Int     @default(5)
+  parentLockMinutes    Int     @default(30)
+  parentShowRank       Boolean @default(true) /// Chỉ hiển thị hạng của chính con mình
+
+  updatedAt DateTime @updatedAt
+  updatedBy Int?
+
+  @@map("school_settings")
+}
+
+/// Bậc xếp loại hạnh kiểm. Nhãn và ngưỡng đều là DỮ LIỆU, không hardcode.
+/// THCS: Chưa đạt(0) < Đạt(1) < Khá(2) < Tốt(3)
+model ClassificationLevel {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique /// CHUA_DAT | DAT | KHA | TOT
+  name      String /// "Chưa đạt", "Đạt", ...
+  /// Thứ bậc dùng cho phép cộng/trừ bậc. Càng lớn càng tốt.
+  rankOrder Int     @unique
+  /// Ngưỡng dưới (đã bao gồm). null = không giới hạn dưới.
+  minScore  Decimal? @db.Decimal(6, 2)
+  /// Ngưỡng trên (KHÔNG bao gồm). null = không giới hạn trên.
+  maxScore  Decimal? @db.Decimal(6, 2)
+  color     String  @default("#888888")
+  isActive  Boolean @default(true)
+
+  scoresByRule ConductScore[]      @relation("LevelByScore")
+  scoresFinal  ConductScore[]      @relation("FinalLevel")
+  adjBefore    ConductAdjustment[] @relation("AdjBefore")
+  adjAfter     ConductAdjustment[] @relation("AdjAfter")
+
+  @@map("classification_levels")
+}
+
+// ============================== LỊCH NĂM HỌC =================================
+
+model AcademicYear {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique /// "2026-2027"
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isCurrent Boolean  @default(false)
+
+  terms       Term[]
+  weeks       AcademicWeek[]
+  breaks      SchoolBreak[]
+  classes     Class[]
+  enrollments Enrollment[]
+  scores      ConductScore[]
+
+  @@map("academic_years")
+}
+
+model Term {
+  id        Int      @id @default(autoincrement())
+  yearId    Int
+  code      String /// "HK1" | "HK2"
+  name      String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  ordinal   Int
+
+  year             AcademicYear      @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  weeks       AcademicWeek[]
+  scores      ConductScore[]
+  alerts      ConductAlert[]
+  adjustments ConductAdjustment[]
+
+  @@unique([yearId, code])
+  @@map("terms")
+}
+
+/// TUẦN HỌC. Chỉ tuần có học mới tồn tại ở đây và mới được cấp weekNo.
+/// Kỳ nghỉ lễ/Tết KHÔNG phải một tuần học — xem model SchoolBreak.
+/// Nhờ vậy weekNo luôn khớp với cách nhà trường đánh số tuần (1..35),
+/// và mẫu số của công thức "điểm kỳ = tổng ÷ số tuần" không bị sai.
+model AcademicWeek {
+  id        Int      @id @default(autoincrement())
+  yearId    Int
+  termId    Int
+  weekNo    Int /// Số thứ tự tuần trong năm học
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  label     String? /// "Nghỉ Tết", "Tuần kiểm tra HK1"...
+
+  /// false = tuần có học nhưng KHÔNG tính vào điểm kỳ.
+  /// Dùng cho tuần kiểm tra học kỳ, tuần chỉ học 2–3 buổi, tuần có sự kiện lớn.
+  /// Đổi cờ này sau khi tuần đã chốt sẽ buộc tính lại điểm kỳ của cả lớp.
+  isCounted        Boolean @default(true)
+  notCountedReason String?
+
+  /// Ngày dự kiến ban đầu, giữ lại để đối chiếu khi lịch bị dời vì nghỉ đột xuất.
+  originalStartDate DateTime? @db.Date
+
+  status   WeekStatus @default(OPEN)
+  lockedAt DateTime?
+
+  violations ViolationRecord[]
+  scores     ConductScore[]
+  reports    WeeklyReport[]
+
+  year AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  term Term         @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([yearId, weekNo])
+  @@index([startDate, endDate])
+  @@map("academic_weeks")
+}
+
+/// KỲ NGHỈ — lễ, Tết, nghỉ đột xuất (bão, dịch).
+/// Nhà trường thường không biết trước, nên đây là dữ liệu nhập giữa năm học.
+/// Khi thêm một kỳ nghỉ, hệ thống DỜI NGÀY của các tuần học chưa chốt về sau,
+/// giữ nguyên weekNo. Tuần đã chốt không bao giờ bị đụng tới.
+model SchoolBreak {
+  id        Int      @id @default(autoincrement())
+  yearId    Int
+  name      String /// "Nghỉ Tết Đinh Mùi", "Nghỉ bão số 5"
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  /// false = mới là dự kiến, chưa có thông báo chính thức của trường/Sở.
+  isConfirmed Boolean @default(false)
+
+  /// Số tuần học đã bị dời khi áp dụng kỳ nghỉ này. Ghi lại để hoàn tác được.
+  shiftedWeeks Int @default(0)
+
+  appliedAt   DateTime?
+  appliedById Int?
+  note        String?
+
+  year AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
+
+  @@index([yearId, startDate])
+  @@map("school_breaks")
+}
+
+// ============================== TỔ CHỨC ======================================
+
+model Grade {
+  id      Int     @id @default(autoincrement())
+  level   Int     @unique /// 6, 7, 8, 9
+  name    String /// "Khối 6"
+  classes Class[]
+
+  @@map("grades")
+}
+
+model Class {
+  id      Int    @id @default(autoincrement())
+  gradeId Int
+  yearId  Int
+  code    String /// "9/1"
+  name    String
+
+  homeroomTeacherId Int?
+
+  grade           Grade             @relation(fields: [gradeId], references: [id])
+  year            AcademicYear      @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  homeroomTeacher User?             @relation("HomeroomOf", fields: [homeroomTeacherId], references: [id])
+  enrollments     Enrollment[]
+  officers        ClassOfficer[]
+  violations      ViolationRecord[]
+  reports         WeeklyReport[]
+  scores          ConductScore[]
+  violationTypes  ViolationType[] /// Mã lỗi riêng do GVCN tạo thêm cho lớp mình
+  overrides       ClassViolationOverride[]
+  alerts          ConductAlert[]
+  auditLogs       AuditLog[]
+
+  @@unique([yearId, code])
+  @@index([homeroomTeacherId])
+  @@map("classes")
+}
+
+model User {
+  id           Int     @id @default(autoincrement())
+  username     String  @unique
+  passwordHash String
+  fullName     String
+  email        String?
+  phone        String?
+
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  lastLoginAt        DateTime?
+  failedAttempts     Int       @default(0)
+  lockedUntil        DateTime?
+
+  /// Tài khoản cán bộ lớp gắn với 1 học sinh cụ thể.
+  studentId Int?     @unique
+  student   Student? @relation(fields: [studentId], references: [id])
+
+  createdById Int?
+  createdBy   User?  @relation("UserCreatedBy", fields: [createdById], references: [id])
+  created     User[] @relation("UserCreatedBy")
+
+  roles          UserRole[]
+  homeroomOf     Class[]           @relation("HomeroomOf")
+  reported       ViolationRecord[] @relation("ReportedBy")
+  reviewed       ViolationRecord[] @relation("ReviewedBy")
+  remediationsOk ViolationRecord[] @relation("RemediationConfirmedBy")
+  sessions       Session[]
+  auditLogs      AuditLog[]
+  issuedCodes    ParentAccessCode[]
+  adjustments    ConductAdjustment[]      @relation("AdjDecidedBy")
+  overrides      ClassViolationOverride[] @relation("OverrideCreatedBy")
+
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+
+  @@map("users")
+}
+
+/// Một người có thể giữ nhiều vai trò; vai trò cán bộ lớp gắn với 1 lớp.
+model UserRole {
+  id      Int  @id @default(autoincrement())
+  userId  Int
+  role    Role
+  classId Int? /// null với ADMIN / BGH
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, classId])
+  @@index([role])
+  @@map("user_roles")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       Int
+  refreshHash  String
+  ip           String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Student {
+  id       Int       @id @default(autoincrement())
+  code     String    @unique /// Mã học sinh của trường
+  fullName String
+  dob      DateTime? @db.Date
+  gender   String?
+  note     String?
+
+  enrollments      Enrollment[]
+  officerRoles     ClassOfficer[]
+  violations       ViolationRecord[]
+  scores           ConductScore[]
+  alerts           ConductAlert[]
+  adjustments      ConductAdjustment[]
+  accessCodes      ParentAccessCode[]
+  account          User?
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@index([fullName])
+  @@map("students")
+}
+
+/// Học sinh × Lớp × Năm học. Bắt buộc phải có để dữ liệu nhiều năm không lẫn.
+model Enrollment {
+  id        Int  @id @default(autoincrement())
+  studentId Int
+  classId   Int
+  yearId    Int
+  orderNo   Int? /// Số thứ tự trong sổ điểm
+
+  isActive  Boolean   @default(true)
+  leftAt    DateTime? @db.Date
+  leaveNote String?
+
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  year    AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, yearId])
+  @@index([classId, isActive])
+  @@map("enrollments")
+}
+
+/// Chức vụ cán bộ lớp, có thời hạn (đổi giữa kỳ được).
+model ClassOfficer {
+  id        Int       @id @default(autoincrement())
+  classId   Int
+  studentId Int
+  role      Role /// LOP_TRUONG | PHO_HOC_TAP | PHO_LAO_DONG
+  validFrom DateTime  @db.Date
+  validTo   DateTime? @db.Date
+
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([classId, role])
+  @@map("class_officers")
+}
+
+// ============================== DANH MỤC LỖI =================================
+
+model ViolationCategory {
+  id       Int          @id @default(autoincrement())
+  kind     CategoryKind @unique
+  name     String
+  ordinal  Int
+  isActive Boolean      @default(true)
+
+  types ViolationType[]
+
+  @@map("violation_categories")
+}
+
+model ViolationType {
+  id         Int    @id @default(autoincrement())
+  code       String @unique /// C01, N01, V01, H01, B01
+  categoryId Int
+  name       String
+
+  /// Điểm CÓ DẤU: cộng là số dương (+2), trừ là số âm (-5).
+  points Int
+
+  /// false với N04 (vắng có phép) và B01/B02 — chỉ theo dõi, không tính điểm.
+  countsForScore Boolean @default(true)
+
+  /// null = mã lỗi chuẩn toàn trường (mặc định).
+  /// Khác null = mã lỗi do GVCN tự thêm, chỉ lớp đó thấy. Xem ClassViolationOverride.
+  classId Int?
+
+  /// Vai trò được phép nhập mã này. C10/C12/B01/B02 chỉ GVCN.
+  allowedRoles Role[]
+
+  /// CHỐT Q5: mọi lỗi đều là lỗi CÁ NHÂN. Giữ cột cho tương lai, mặc định false.
+  isBulkCapable Boolean @default(false)
+
+  /// C06, C07 do hệ thống tự tính, không ai nhập tay.
+  isAutoComputed Boolean @default(false)
+
+  /// Giới hạn số lần được ghi cho 1 học sinh trong 1 tuần. null = không giới hạn.
+  maxPerWeek Int?
+
+  // --- Yêu cầu khắc phục ---
+  requiresRemediation Boolean @default(false)
+  remediationNote     String? /// "Trực bổ sung 1 tuần", "Viết bản kiểm điểm"...
+  remediationDays     Int? /// Số ngày được phép khắc phục (N08 = 3)
+
+  ordinal  Int     @default(0)
+  isActive Boolean @default(true)
+  note     String?
+
+  category   ViolationCategory        @relation(fields: [categoryId], references: [id])
+  class      Class?                   @relation(fields: [classId], references: [id])
+  violations ViolationRecord[]
+  overrides  ClassViolationOverride[]
+
+  @@index([categoryId, isActive])
+  @@map("violation_types")
+}
+
+// ============================== QUY TẮC HẠ / TĂNG BẬC ========================
+
+/// 14 quy tắc trong quy chế, lưu thành dữ liệu để đổi ngưỡng không cần sửa code.
+model ConductRule {
+  id   Int    @id @default(autoincrement())
+  code String @unique /// R01..R14
+  name String
+
+  ruleType RuleType
+
+  /// Các mã lỗi kích hoạt quy tắc. Cho phép gộp, VD R02 = ["N02","N03"].
+  violationCodes String[]
+
+  operator       CompareOp?  @default(GT)
+  thresholdValue Int? /// "quá 10 lần" → operator=GT, thresholdValue=10
+
+  periodScope PeriodScope @default(TERM)
+
+  effect      RuleEffect
+  effectLevels Int        @default(1) /// Số bậc hạ/tăng
+
+  isActive      Boolean   @default(true)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  note          String?
+
+  alerts ConductAlert[]
+
+  @@map("conduct_rules")
+}
+
+// ============================== BẢN GHI VI PHẠM ==============================
+
+model ViolationRecord {
+  id        Int @id @default(autoincrement())
+  classId   Int
+  studentId Int
+  weekId    Int
+  typeId    Int
+
+  // --- SNAPSHOT BẤT BIẾN ---
+  // Sửa bảng điểm KHÔNG được làm đổi báo cáo đã phát hành.
+  typeCodeSnapshot String
+  typeNameSnapshot String
+  pointsSnapshot   Int
+
+  quantity     Int      @default(1)
+  occurredDate DateTime @db.Date
+  periodNo     Int? /// Tiết học
+  note         String?
+
+  status       ViolationStatus @default(PENDING)
+  rejectReason String?
+
+  /// Dự phòng cho thao tác ghi lỗi hàng loạt. Chốt Q5: hiện không dùng.
+  isBulk      Boolean @default(false)
+  bulkGroupId String?
+
+  /// Cán bộ lớp ghi cho cán bộ lớp khác → GVCN cần chú ý khi duyệt.
+  isFlagged Boolean @default(false)
+
+  // --- Khắc phục ---
+  remediationStatus      RemediationStatus @default(NOT_REQUIRED)
+  remediationNote        String?
+  remediationDeadline    DateTime?         @db.Date
+  remediationConfirmedById Int?
+  remediationConfirmedAt DateTime?
+
+  reportedById Int
+  reportedAt   DateTime  @default(now())
+  reviewedById Int?
+  reviewedAt   DateTime?
+
+  isLocked Boolean @default(false)
+
+  deletedAt DateTime?
+  deletedBy Int?
+
+  class                 Class         @relation(fields: [classId], references: [id])
+  student               Student       @relation(fields: [studentId], references: [id])
+  week                  AcademicWeek  @relation(fields: [weekId], references: [id])
+  type                  ViolationType @relation(fields: [typeId], references: [id])
+  reportedBy            User          @relation("ReportedBy", fields: [reportedById], references: [id])
+  reviewedBy            User?         @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  remediationConfirmedBy User?        @relation("RemediationConfirmedBy", fields: [remediationConfirmedById], references: [id])
+
+  @@index([classId, weekId, status])
+  @@index([studentId, weekId])
+  @@index([status, reportedAt])
+  @@index([bulkGroupId])
+  @@index([remediationStatus, remediationDeadline])
+  @@map("violation_records")
+}
+
+// ============================== KẾT QUẢ ======================================
+
+/// Điểm và xếp loại đã chốt. periodKey: "W:12" | "T:1" | "Y:1"
+model ConductScore {
+  id        Int         @id @default(autoincrement())
+  studentId Int
+  classId   Int
+  yearId    Int
+  scope     PeriodScope
+  periodKey String
+
+  weekId Int?
+  termId Int?
+
+  baseScore    Decimal @db.Decimal(8, 2)
+  bonusTotal   Decimal @db.Decimal(8, 2) @default(0)
+  penaltyTotal Decimal @db.Decimal(8, 2) @default(0)
+
+  /// Điểm trước khi kẹp trần/sàn. Chốt Q1/Q2: không trần, cho phép âm,
+  /// nên rawScore và finalScore thường bằng nhau.
+  rawScore   Decimal @db.Decimal(8, 2)
+  /// Điểm cuối cùng dùng để xếp loại và xếp hạng.
+  finalScore Decimal @db.Decimal(8, 2)
+
+  /// Mẫu số của điểm kỳ = số tuần ĐÃ CHỐT và isCounted = true, tính tới thời điểm
+  /// tính điểm. KHÔNG phải tổng số tuần của học kỳ.
+  /// Xem điểm ở tuần 5 mà chia cho 18 thì mọi học sinh đều ra "Chưa đạt".
+  countedWeeks Int?
+
+  /// Bậc suy ra thuần từ điểm — đây là bậc app tự tính được.
+  levelByScoreId Int?
+
+  /// Số bậc mà quy tắc ĐỀ XUẤT hạ/tăng. Chỉ để hiển thị, KHÔNG áp vào finalLevel.
+  suggestedDowngrades Int @default(0)
+  suggestedUpgrades   Int @default(0)
+
+  /// Bậc cuối cùng: bằng levelByScore, trừ khi có ConductAdjustment
+  /// từ cuộc họp BGH – GVCN – phụ huynh.
+  finalLevelId Int?
+
+  rankInClass Int?
+  classSize   Int?
+
+  computedAt DateTime @default(now())
+
+  student      Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class        Class                @relation(fields: [classId], references: [id])
+  year         AcademicYear         @relation(fields: [yearId], references: [id])
+  week         AcademicWeek?        @relation(fields: [weekId], references: [id])
+  term         Term?                @relation(fields: [termId], references: [id])
+  levelByScore ClassificationLevel? @relation("LevelByScore", fields: [levelByScoreId], references: [id])
+  finalLevel   ClassificationLevel? @relation("FinalLevel", fields: [finalLevelId], references: [id])
+
+  @@unique([studentId, scope, periodKey])
+  @@index([classId, scope, periodKey])
+  @@map("conduct_scores")
+}
+
+/// CẢNH BÁO do rule engine phát hiện. App KHÔNG tự hạ bậc (chốt Q3/Q4) —
+/// bảng này chỉ nói "em này đã chạm ngưỡng, cần đưa ra họp".
+model ConductAlert {
+  id        Int @id @default(autoincrement())
+  studentId Int
+  classId   Int
+  termId    Int
+  ruleId    Int
+
+  ruleCodeSnapshot String
+  ruleNameSnapshot String
+
+  /// Số lần đếm được và ngưỡng của quy tắc tại thời điểm phát hiện,
+  /// để hiển thị "9/10 lần" mà không phải truy ngược quy tắc.
+  triggerCount   Int
+  thresholdValue Int?
+
+  /// Đề xuất của quy tắc — chỉ để tham khảo trong cuộc họp.
+  suggestedEffect RuleEffect
+  suggestedLevels Int        @default(1)
+
+  /// id các bản ghi vi phạm làm bằng chứng
+  evidenceRecordIds Int[]
+
+  status AlertStatus @default(TRIGGERED)
+
+  firstDetectedAt DateTime  @default(now())
+  lastCheckedAt   DateTime  @updatedAt
+  acknowledgedById Int?
+  acknowledgedAt  DateTime?
+  resolvedAt      DateTime?
+  resolutionNote  String?
+
+  student    Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class      Class              @relation(fields: [classId], references: [id])
+  term       Term               @relation(fields: [termId], references: [id], onDelete: Cascade)
+  rule       ConductRule        @relation(fields: [ruleId], references: [id])
+  adjustment ConductAdjustment? @relation(fields: [adjustmentId], references: [id])
+  adjustmentId Int?
+
+  @@unique([studentId, termId, ruleId])
+  @@index([classId, termId, status])
+  @@index([status, firstDetectedAt])
+  @@map("conduct_alerts")
+}
+
+/// QUYẾT ĐỊNH điều chỉnh xếp loại sau cuộc họp BGH – GVCN – phụ huynh.
+/// Đây là nguồn duy nhất được phép làm khác đi kết quả tính từ điểm.
+model ConductAdjustment {
+  id        Int @id @default(autoincrement())
+  studentId Int
+  termId    Int
+
+  levelBeforeId Int
+  levelAfterId  Int
+
+  reason      String
+  meetingDate DateTime  @db.Date
+  attendees   String? /// "BGH, GVCN, phụ huynh em A"
+  minutesRef  String? /// Số hiệu biên bản họp
+
+  decidedById Int
+  createdAt   DateTime @default(now())
+
+  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  term        Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
+  levelBefore ClassificationLevel @relation("AdjBefore", fields: [levelBeforeId], references: [id])
+  levelAfter  ClassificationLevel @relation("AdjAfter", fields: [levelAfterId], references: [id])
+  decidedBy   User                @relation("AdjDecidedBy", fields: [decidedById], references: [id])
+  alerts      ConductAlert[]
+
+  @@unique([studentId, termId])
+  @@index([termId])
+  @@map("conduct_adjustments")
+}
+
+/// CHỐT Q7: GVCN tinh chỉnh bảng điểm chuẩn cho lớp mình.
+/// Bảng chuẩn nằm ở ViolationType; bảng này chỉ ghi phần KHÁC BIỆT.
+model ClassViolationOverride {
+  id      Int @id @default(autoincrement())
+  classId Int
+  typeId  Int
+
+  /// false = lớp này không dùng mã lỗi đó
+  isEnabled Boolean @default(true)
+
+  /// Chỉ dùng được khi SchoolSetting.allowClassPointOverride = true
+  pointsOverride Int?
+
+  note        String?
+  createdById Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  class     Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  type      ViolationType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  createdBy User          @relation("OverrideCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([classId, typeId])
+  @@map("class_violation_overrides")
+}
+
+model WeeklyReport {
+  id      Int @id @default(autoincrement())
+  classId Int
+  weekId  Int
+
+  status        WeekStatus @default(PENDING_REVIEW)
+  lockedAt      DateTime?
+  lockedById    Int?
+  publishedAt   DateTime?
+  publishedById Int?
+  unlockReason  String?
+  unlockCount   Int        @default(0)
+
+  /// Bản chụp số liệu tại thời điểm phát hành.
+  snapshot Json?
+
+  class Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  week  AcademicWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, weekId])
+  @@map("weekly_reports")
+}
+
+/// Mã 6 số cấp cho phụ huynh. Luôn đi kèm token dài trên URL.
+model ParentAccessCode {
+  id        Int    @id @default(autoincrement())
+  studentId Int
+  token     String @unique /// 32+ ký tự ngẫu nhiên, nằm trên URL
+  codeHash  String /// bcrypt của mã 6 số — KHÔNG lưu mã gốc
+
+  issuedById Int
+  issuedAt   DateTime  @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  lastUsedAt     DateTime?
+  viewCount      Int       @default(0)
+
+  student  Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  issuedBy User    @relation(fields: [issuedById], references: [id])
+
+  @@index([studentId, revokedAt])
+  @@map("parent_access_codes")
+}
+
+// ============================== AUDIT ========================================
+
+/// Chỉ ghi thêm, không bao giờ sửa hay xoá.
+model AuditLog {
+  id        BigInt      @id @default(autoincrement())
+  actorId   Int?
+  actorRole Role?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  classId   Int?
+
+  beforeJson Json?
+  afterJson  Json?
+  summary    String?
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  actor User?  @relation(fields: [actorId], references: [id])
+  class Class? @relation(fields: [classId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([classId, createdAt])
+  @@map("audit_logs")
+}

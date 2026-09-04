@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wireframe — Hệ thống theo dõi nề nếp THCS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FCFCFA;
+  --grid:#E6EBE6;
+  --le-do:#C9584F;
+  --tim:#4E3A87;
+  --tim-nhat:#EFEBF8;
+  --ink:#1F2128;
+  --ink-2:#6A707C;
+  --ink-3:#9AA0AA;
+  --line:#DCE0DA;
+  --fill:#EFF1EE;
+  --ok:#2F7A56;
+  --wait:#9A7400;
+  --no:#B3453E;
+  --r:5px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:'Be Vietnam Pro',system-ui,sans-serif;
+  color:var(--ink);
+  background:
+    linear-gradient(var(--grid) 1px,transparent 1px) 0 0/100% 26px,
+    var(--paper);
+  line-height:1.5;
+  padding:0 0 80px;
+}
+
+/* ---------- khung trang ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+header.top{
+  border-bottom:2px solid var(--ink);
+  padding:34px 0 18px;margin-bottom:0;
+}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--tim);font-weight:500;
+}
+h1{font-size:clamp(24px,4.5vw,34px);font-weight:700;letter-spacing:-.02em;margin:6px 0 8px}
+.sub{color:var(--ink-2);font-size:14px;max-width:60ch}
+.meta{
+  display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3);
+}
+
+/* ---------- tabs ---------- */
+nav.tabs{
+  display:flex;gap:0;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;
+  background:var(--paper);
+}
+nav.tabs button{
+  font-family:inherit;font-size:13px;font-weight:500;color:var(--ink-2);
+  background:none;border:0;border-bottom:2px solid transparent;
+  padding:14px 16px;cursor:pointer;display:flex;align-items:baseline;gap:8px;
+}
+nav.tabs button .n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-3)}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button[aria-selected="true"]{color:var(--tim);border-bottom-color:var(--tim);font-weight:600}
+nav.tabs button[aria-selected="true"] .n{color:var(--tim)}
+nav.tabs button:focus-visible{outline:2px solid var(--tim);outline-offset:-2px}
+
+/* ---------- panel ---------- */
+.panel{display:none;padding:30px 0 0}
+.panel.on{display:block}
+.panel-head{margin-bottom:22px;max-width:66ch}
+.panel-head h2{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.panel-head .who{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--tim);
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;
+}
+.panel-head p{color:var(--ink-2);font-size:14px;margin-top:7px}
+
+.split{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:34px;align-items:start}
+@media(max-width:900px){.split{grid-template-columns:1fr;gap:26px}}
+
+/* ---------- device frame: lề đỏ là chữ ký của bản vẽ ---------- */
+.device{
+  background:#fff;border:1px solid var(--line);border-radius:var(--r);
+  position:relative;overflow:hidden;
+  box-shadow:0 1px 0 rgba(31,33,40,.04),0 8px 24px -18px rgba(31,33,40,.4);
+}
+.device::before{
+  content:"";position:absolute;top:0;bottom:0;left:26px;width:1px;
+  background:var(--le-do);opacity:.35;pointer-events:none;z-index:5;
+}
+.device.mobile{max-width:390px;margin:0 auto}
+.device .screen{padding:0 0 0 26px}
+
+/* ---------- chú giải ---------- */
+.notes{position:sticky;top:56px}
+.notes h3{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:500;
+  padding-bottom:9px;border-bottom:1px solid var(--line);margin-bottom:4px;
+}
+.note{display:flex;gap:11px;padding:12px 0;border-bottom:1px solid var(--line)}
+.note .mark{
+  flex:0 0 20px;height:20px;border-radius:50%;
+  background:var(--tim);color:#fff;
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+  display:grid;place-items:center;margin-top:1px;
+}
+.note.q .mark{background:var(--le-do)}
+.note p{font-size:13px;color:var(--ink-2);line-height:1.45}
+.note b{color:var(--ink);font-weight:600}
+.note .tag{
+  display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;
+  font-weight:700;color:var(--le-do);border:1px solid var(--le-do);
+  padding:0 4px;border-radius:3px;margin-right:5px;
+}
+
+/* ---------- nguyên tố giao diện trong wireframe ---------- */
+.bar{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 14px;border-bottom:1px solid var(--line);
+}
+.bar .t{font-size:14px;font-weight:600}
+.bar .s{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-2)}
+.pad{padding:14px}
+.tight{padding:10px 14px}
+
+.seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg span{flex:1;text-align:center;font-size:12.5px;padding:8px 6px;color:var(--ink-2)}
+.seg span.on{background:var(--tim);color:#fff;font-weight:600}
+
+.input{
+  border:1px solid var(--line);border-radius:var(--r);padding:9px 11px;
+  font-size:13px;color:var(--ink-3);background:#fff;
+}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{
+  border:1px solid var(--line);border-radius:20px;padding:5px 11px;
+  font-size:12px;color:var(--ink-2);white-space:nowrap;
+}
+.chip.on{background:var(--tim);border-color:var(--tim);color:#fff;font-weight:500}
+
+.hs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.hs{
+  border:1px solid var(--line);border-radius:var(--r);padding:8px 6px;text-align:center;
+  font-size:11.5px;color:var(--ink-2);line-height:1.25;
+}
+.hs .av{width:22px;height:22px;border-radius:50%;background:var(--fill);margin:0 auto 5px}
+.hs.on{border-color:var(--tim);border-width:2px;background:var(--tim-nhat);color:var(--ink);font-weight:600}
+.hs .cnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-3);display:block;margin-top:2px}
+
+.row{
+  display:flex;align-items:center;gap:10px;padding:9px 0;
+  border-bottom:1px solid var(--line);
+}
+.row:last-child{border-bottom:0}
+.code{
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+  color:var(--tim);background:var(--tim-nhat);padding:2px 5px;border-radius:3px;flex:0 0 auto;
+}
+.row .nm{flex:1;font-size:13px;min-width:0}
+.pt{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;flex:0 0 auto}
+.pt.minus{color:var(--no)}
+.pt.plus{color:var(--ok)}
+.plusbtn{
+  width:26px;height:26px;border:1px solid var(--line);border-radius:var(--r);
+  display:grid;place-items:center;color:var(--ink-2);font-size:15px;flex:0 0 auto;
+}
+.plusbtn.on{background:var(--tim);border-color:var(--tim);color:#fff}
+
+.btn{
+  display:block;text-align:center;background:var(--tim);color:#fff;
+  padding:12px;border-radius:var(--r);font-size:14px;font-weight:600;
+}
+.btn.ghost{background:#fff;color:var(--ink-2);border:1px solid var(--line);font-weight:500}
+.btn.sm{padding:6px 11px;font-size:12px;display:inline-block}
+
+/* con dấu trạng thái — mực tím kiểu sổ đầu bài */
+.stamp{
+  font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;
+  border:1.5px solid currentColor;border-radius:3px;padding:1px 5px;
+  display:inline-block;
+}
+.stamp.wait{color:var(--wait)}
+.stamp.ok{color:var(--ok)}
+.stamp.no{color:var(--no)}
+
+.callout{
+  position:absolute;width:20px;height:20px;border-radius:50%;
+  background:var(--tim);color:#fff;font-family:'JetBrains Mono',monospace;
+  font-size:11px;font-weight:700;display:grid;place-items:center;z-index:10;
+  box-shadow:0 0 0 3px #fff;
+}
+.callout.q{background:var(--le-do)}
+
+.banner{
+  border-left:3px solid var(--wait);background:#FDF9EC;
+  padding:9px 12px;font-size:12.5px;color:#6B5400;
+}
+.banner.alert{border-left-color:var(--no);background:#FCF0EF;color:#7E312C}
+
+table{width:100%;border-collapse:collapse}
+th{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:500;
+  text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+td{padding:9px 8px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.num,th.num{text-align:right;font-family:'JetBrains Mono',monospace}
+tr.flag td{background:#FDF9EC}
+.scroller{overflow-x:auto}
+.scroller table{min-width:660px}
+
+.kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:640px){.kpi{grid-template-columns:repeat(2,1fr)}}
+.kpi div{border:1px solid var(--line);border-radius:var(--r);padding:11px}
+.kpi .lb{font-size:11px;color:var(--ink-2);line-height:1.3}
+.kpi .vl{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;margin-top:5px}
+
+.score-hero{text-align:center;padding:20px 14px 16px;border-bottom:1px solid var(--line)}
+.score-hero .big{font-family:'JetBrains Mono',monospace;font-size:52px;font-weight:700;line-height:1}
+.score-hero .unit{font-size:13px;color:var(--ink-2);margin-top:2px}
+.score-hero .lv{margin-top:11px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.pill{border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600}
+.pill.kha{color:#3B6FB0;border-color:#3B6FB0}
+
+.spark{display:flex;align-items:flex-end;gap:5px;height:56px}
+.spark i{flex:1;background:var(--fill);border-radius:2px 2px 0 0;display:block}
+.spark i.now{background:var(--tim)}
+.spark-x{display:flex;gap:5px;margin-top:4px}
+.spark-x i{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-3);font-style:normal}
+
+.stack{display:flex;height:16px;border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.stack i{display:block}
+
+.sec-t{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:500;margin-bottom:8px;
+}
+.rail{display:grid;grid-template-columns:150px 1fr;min-height:520px}
+@media(max-width:760px){.rail{grid-template-columns:1fr}.rail aside{display:none}}
+.rail aside{border-right:1px solid var(--line);padding:12px 0}
+.rail aside a{
+  display:block;padding:8px 14px;font-size:12.5px;color:var(--ink-2);text-decoration:none;
+}
+.rail aside a.on{color:var(--tim);font-weight:600;background:var(--tim-nhat);
+  box-shadow:inset 2px 0 0 var(--tim)}
+
+footer{
+  margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--ink-3);
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Bản vẽ bố cục · v0.1 · chưa phải thiết kế giao diện</div>
+  <h1>Hệ thống theo dõi nề nếp — 4 màn hình cốt lõi</h1>
+  <p class="sub">Bốn màn hình này quyết định toàn bộ trải nghiệm. Mọi màn hình còn lại đều là biến thể của chúng. Các chú giải màu đỏ là chỗ chưa chốt được với nhà trường — hãy đưa bản vẽ này cho GVCN xem để lấy câu trả lời.</p>
+  <div class="meta">
+    <span>THCS · 62 lớp · 45 HS/lớp</span>
+    <span>Quy chế: lớp 9/1</span>
+    <span>49 mã lỗi · 14 quy tắc hạ bậc</span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-p="p1"><span class="n">01</span>Nhập lỗi nhanh</button>
+  <button role="tab" aria-selected="false" data-p="p2"><span class="n">02</span>Hàng chờ duyệt</button>
+  <button role="tab" aria-selected="false" data-p="p3"><span class="n">03</span>Báo cáo phụ huynh</button>
+  <button role="tab" aria-selected="false" data-p="p4"><span class="n">04</span>Tổng quan BGH</button>
+</nav>
+
+<!-- ============================ 01 ============================ -->
+<section class="panel on" id="p1" role="tabpanel">
+  <div class="panel-head">
+    <div class="who">Cán bộ lớp · điện thoại</div>
+    <h2>Nhập lỗi nhanh</h2>
+    <p>Màn hình được dùng nhiều nhất trong hệ thống, ngay tại lớp, thường là lúc chuyển tiết. Mục tiêu: một lỗi trong 15 giây. Nếu chậm hơn, cán bộ lớp sẽ quay lại ghi giấy.</p>
+  </div>
+
+  <div class="split">
+    <div class="device mobile">
+      <div class="screen">
+        <div class="bar">
+          <div><div class="t">Lớp 9/1</div><div class="s">Tuần 12 · T4 20/8</div></div>
+          <span class="stamp wait">3 chờ duyệt</span>
+        </div>
+
+        <div class="pad" style="position:relative">
+          <span class="callout" style="left:-4px;top:8px">1</span>
+          <div class="seg"><span class="on">Trừ điểm</span><span>Cộng điểm</span></div>
+        </div>
+
+        <div class="tight" style="position:relative">
+          <span class="callout" style="left:-4px;top:26px">2</span>
+          <div class="sec-t">Chọn học sinh</div>
+          <div class="input" style="margin-bottom:8px">Tìm theo tên hoặc số thứ tự…</div>
+          <div class="hs-grid">
+            <div class="hs on"><div class="av"></div>Nguyễn Văn An<span class="cnt">2 lỗi</span></div>
+            <div class="hs"><div class="av"></div>Trần Thị Bình<span class="cnt">0 lỗi</span></div>
+            <div class="hs"><div class="av"></div>Lê Hữu Chi<span class="cnt">1 lỗi</span></div>
+            <div class="hs"><div class="av"></div>Phạm Ngọc Dũng<span class="cnt">0 lỗi</span></div>
+            <div class="hs"><div class="av"></div>Hoàng Minh Giang<span class="cnt">3 lỗi</span></div>
+            <div class="hs" style="color:var(--ink-3)">…42 em còn lại</div>
+          </div>
+        </div>
+
+        <div class="tight" style="border-top:1px solid var(--line);position:relative">
+          <span class="callout" style="left:-4px;top:26px">3</span>
+          <div class="sec-t">Chọn lỗi cho Nguyễn Văn An</div>
+          <div class="chips" style="margin-bottom:10px">
+            <span class="chip on">Nề nếp</span><span class="chip">Vệ sinh</span>
+            <span class="chip">Học tập</span><span class="chip">Hay dùng</span>
+          </div>
+          <div class="row"><span class="code">N01</span><span class="nm">Đi học trễ</span><span class="pt minus">−5</span><span class="plusbtn on">✓</span></div>
+          <div class="row"><span class="code">N07</span><span class="nm">Đồng phục sai quy định</span><span class="pt minus">−5</span><span class="plusbtn">+</span></div>
+          <div class="row"><span class="code">N06</span><span class="nm">Tập trung chào cờ chậm</span><span class="pt minus">−5</span><span class="plusbtn">+</span></div>
+          <div class="row"><span class="code">N14</span><span class="nm">Mang điện thoại đến trường</span><span class="pt minus">−20</span><span class="plusbtn">+</span></div>
+          <div class="row"><span class="code">N08</span><span class="nm">Tóc sai quy định <span style="color:var(--ink-3)">· cần khắc phục 3 ngày</span></span><span class="pt minus">−10</span><span class="plusbtn">+</span></div>
+        </div>
+
+        <div class="tight" style="border-top:1px solid var(--line);position:relative">
+          <span class="callout q" style="left:-4px;top:26px">4</span>
+          <div class="sec-t">Thời điểm</div>
+          <div style="display:flex;gap:8px">
+            <div class="input" style="flex:1">T4 20/8/2026</div>
+            <div class="input" style="flex:0 0 96px">Tiết 3</div>
+          </div>
+        </div>
+
+        <div class="pad" style="border-top:1px solid var(--line);position:relative">
+          <span class="callout" style="left:-4px;top:22px">5</span>
+          <div class="btn">Lưu 1 lỗi · gửi GVCN duyệt</div>
+          <p style="font-size:11.5px;color:var(--ink-3);text-align:center;margin-top:8px">
+            Lỗi chỉ tính điểm sau khi GVCN duyệt.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Chú giải</h3>
+      <div class="note"><span class="mark">1</span><p>Tách <b>Trừ điểm</b> và <b>Cộng điểm</b> ngay từ đầu. Nếu trộn chung, cán bộ lớp sẽ gần như không bao giờ ghi điểm cộng, và quy chế có tới 12 mã cộng.</p></div>
+      <div class="note"><span class="mark">2</span><p>Chọn học sinh <b>trước</b>, chọn lỗi sau. Thực tế ở lớp là nhìn thấy một bạn vi phạm rồi mới nghĩ đến mã lỗi. Số lỗi hiện ngay trên thẻ để thấy em nào chưa từng bị ghi.</p></div>
+      <div class="note"><span class="mark">3</span><p>Nhóm <b>Hay dùng</b> tự học theo thói quen từng lớp. Trong 49 mã thì khoảng 8 mã chiếm phần lớn số lần nhập.</p></div>
+      <div class="note q"><span class="mark">4</span><p><span class="tag">Q5</span>Nếu H09/H10 là lỗi <b>cả lớp</b>, màn này cần thêm nút "Ghi cho cả lớp" tạo 45 bản ghi cùng lúc. Hỏi GVCN trước khi dựng.</p></div>
+      <div class="note"><span class="mark">5</span><p>Nút lưu đếm số lỗi đang chọn. Cho phép chọn nhiều lỗi cho cùng một em rồi lưu một lần.</p></div>
+      <div class="note q"><span class="mark">6</span><p><span class="tag">Ràng buộc</span>Cán bộ lớp <b>không</b> ghi được điểm cộng cho chính mình. Ghi cho cán bộ lớp khác thì bản ghi bị đánh dấu để GVCN chú ý.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 02 ============================ -->
+<section class="panel" id="p2" role="tabpanel">
+  <div class="panel-head">
+    <div class="who">GVCN · máy tính</div>
+    <h2>Hàng chờ duyệt</h2>
+    <p>Nút thắt của toàn hệ thống. Tuần chỉ chốt được khi hàng chờ trống. 62 GVCN cùng chậm một nhịp là cả trường không ra được báo cáo.</p>
+  </div>
+
+  <div class="split">
+    <div class="device">
+      <div class="rail">
+        <aside>
+          <a href="#" class="on">Hàng chờ duyệt</a>
+          <a href="#">Sổ nề nếp tuần</a>
+          <a href="#">Việc cần khắc phục</a>
+          <a href="#">Ghi nhận đặc biệt</a>
+          <a href="#">Học sinh</a>
+          <a href="#">Tài khoản</a>
+          <a href="#">Báo cáo</a>
+          <a href="#">Nhật ký thay đổi</a>
+        </aside>
+
+        <div>
+          <div class="bar">
+            <div><div class="t">Hàng chờ duyệt · 14 bản ghi</div>
+              <div class="s">Lớp 9/1 · Tuần 12 · T2 18/8 – CN 24/8</div></div>
+            <span class="btn sm ghost">Xuất Excel</span>
+          </div>
+
+          <div class="tight" style="position:relative">
+            <span class="callout" style="left:-20px;top:20px">1</span>
+            <div class="banner">Còn <b>14 bản ghi</b> chưa duyệt. Hệ thống chốt tuần vào <b>CN 20:00</b>. Sau 12:00 thứ Hai, bản ghi chưa duyệt sẽ bị huỷ và không tính điểm.</div>
+          </div>
+
+          <div class="tight" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:relative">
+            <span class="callout" style="left:-20px;top:18px">2</span>
+            <span class="chip on">Tất cả (14)</span>
+            <span class="chip">Cần chú ý (2)</span>
+            <span class="chip">Điểm cộng (3)</span>
+            <span style="flex:1"></span>
+            <span class="btn sm">Duyệt 4 mục đã chọn</span>
+            <span class="btn sm ghost">Từ chối</span>
+          </div>
+
+          <div class="scroller"><table>
+            <thead><tr>
+              <th style="width:26px"><input type="checkbox" checked disabled></th>
+              <th>Học sinh</th><th>Lỗi</th><th class="num">Điểm</th>
+              <th>Ngày · tiết</th><th>Người ghi</th><th>Xử lý</th>
+            </tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" checked disabled></td>
+                <td>Nguyễn Văn An</td>
+                <td><span class="code">N01</span> Đi học trễ</td>
+                <td class="num pt minus">−5</td><td>T2 18/8 · —</td><td>Lớp trưởng</td>
+                <td><span class="btn sm">Duyệt</span></td></tr>
+              <tr class="flag"><td><input type="checkbox" disabled></td>
+                <td>Trần Thị Bình <span class="stamp no" style="font-size:9px">cán bộ lớp</span></td>
+                <td><span class="code">H01</span> Nói chuyện riêng</td>
+                <td class="num pt minus">−5</td><td>T3 19/8 · tiết 2</td><td>Phó học tập</td>
+                <td><span class="btn sm">Duyệt</span></td></tr>
+              <tr><td><input type="checkbox" checked disabled></td>
+                <td>Hoàng Minh Giang</td>
+                <td><span class="code">N08</span> Tóc sai quy định</td>
+                <td class="num pt minus">−10</td><td>T3 19/8 · —</td><td>Lớp trưởng</td>
+                <td><span class="btn sm">Duyệt</span></td></tr>
+              <tr><td><input type="checkbox" disabled></td>
+                <td>Lê Hữu Chi</td>
+                <td><span class="code">C01</span> Phát biểu xây dựng bài</td>
+                <td class="num pt plus">+2</td><td>T4 20/8 · tiết 1</td><td>Phó học tập</td>
+                <td><span class="btn sm">Duyệt</span></td></tr>
+              <tr><td><input type="checkbox" checked disabled></td>
+                <td>Phạm Ngọc Dũng</td>
+                <td><span class="code">V01</span> Không trực nhật</td>
+                <td class="num pt minus">−10</td><td>T4 20/8 · —</td><td>Phó lao động</td>
+                <td><span class="btn sm">Duyệt</span></td></tr>
+              <tr><td colspan="7" style="color:var(--ink-3);text-align:center">…9 bản ghi còn lại</td></tr>
+            </tbody>
+          </table></div>
+
+          <div class="tight" style="border-top:1px solid var(--line);position:relative">
+            <span class="callout" style="left:-20px;top:20px">3</span>
+            <div class="sec-t">Sắp chạm ngưỡng hạ bậc — học kỳ 1</div>
+            <div class="row"><span class="nm"><b>Nguyễn Văn An</b> · đi trễ <b>9/10 lần</b></span><span class="stamp wait">còn 1 lần</span></div>
+            <div class="row"><span class="nm"><b>Hoàng Minh Giang</b> · N08 quá hạn khắc phục <b>2 ngày</b></span><span class="stamp no">còn 1 ngày</span></div>
+            <div class="row"><span class="nm"><b>Vũ Thanh Sơn</b> · mang điện thoại <b>3/3 lần</b></span><span class="stamp no">đã hạ 1 bậc</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Chú giải</h3>
+      <div class="note"><span class="mark">1</span><p>Nói rõ <b>điều gì xảy ra nếu không làm gì</b>. GVCN cần biết hạn chót và hậu quả, không phải một con số đếm suông.</p></div>
+      <div class="note"><span class="mark">2</span><p>Duyệt hàng loạt là mặc định. GVCN có 14 bản ghi mỗi tuần × 35 tuần; bắt bấm từng cái là hệ thống sẽ bị bỏ.</p></div>
+      <div class="note"><span class="mark">3</span><p>Khối cảnh báo ngưỡng là <b>lý do GVCN quay lại hằng ngày</b>. Nó biến hệ thống từ sổ ghi chép thành công cụ can thiệp sớm — nhắc được học sinh trước khi em bị hạ bậc.</p></div>
+      <div class="note"><span class="mark">4</span><p>Dòng nền vàng: cán bộ lớp ghi lỗi cho cán bộ lớp khác. Không chặn, chỉ đánh dấu để GVCN đọc kỹ.</p></div>
+      <div class="note q"><span class="mark">5</span><p><span class="tag">Q3</span>Khi một em dính nhiều quy tắc hạ bậc cùng lúc, khối cảnh báo phải hiện <b>tổng số bậc bị hạ</b>. Cần chốt là cộng dồn hay tối đa 1 bậc.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 03 ============================ -->
+<section class="panel" id="p3" role="tabpanel">
+  <div class="panel-head">
+    <div class="who">Phụ huynh · điện thoại · không đăng nhập</div>
+    <h2>Báo cáo gửi phụ huynh</h2>
+    <p>Đây là sản phẩm cuối mà nhà trường thực sự mua. Hãy đưa chính màn hình này cho GVCN xem trước tiên — nhìn một bản báo cáo cụ thể, họ sẽ tự trả lời được câu hỏi về trần điểm cộng và cách xếp hạng.</p>
+  </div>
+
+  <div class="split">
+    <div class="device mobile">
+      <div class="screen">
+        <div class="bar">
+          <div><div class="t">Nguyễn Văn An</div><div class="s">Lớp 9/1 · Tuần 12 (18/8 – 24/8)</div></div>
+        </div>
+
+        <div class="score-hero" style="position:relative">
+          <span class="callout q" style="left:-20px;top:16px">1</span>
+          <div class="big">72</div>
+          <div class="unit">điểm nề nếp tuần này</div>
+          <div class="lv">
+            <span class="pill kha">Khá</span>
+            <span class="pill">Hạng 21 / 45</span>
+          </div>
+        </div>
+
+        <div class="tight" style="position:relative">
+          <span class="callout" style="left:-20px;top:22px">2</span>
+          <div class="sec-t">12 tuần gần nhất</div>
+          <div class="spark">
+            <i style="height:88%"></i><i style="height:95%"></i><i style="height:80%"></i>
+            <i style="height:100%"></i><i style="height:72%"></i><i style="height:85%"></i>
+            <i style="height:60%"></i><i style="height:78%"></i><i style="height:92%"></i>
+            <i style="height:65%"></i><i style="height:83%"></i><i class="now" style="height:72%"></i>
+          </div>
+          <div class="spark-x"><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i>6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i></div>
+        </div>
+
+        <div class="tight" style="position:relative">
+          <span class="callout" style="left:-20px;top:14px">3</span>
+          <div class="banner alert">Em đã đi học trễ <b>9 lần</b> trong học kỳ này. Quá 10 lần sẽ bị hạ 1 bậc hạnh kiểm học kỳ.</div>
+        </div>
+
+        <div class="tight" style="border-top:1px solid var(--line)">
+          <div class="sec-t">Lỗi trong tuần</div>
+          <div class="row"><span class="code">N01</span><span class="nm">Đi học trễ<br><span style="color:var(--ink-3);font-size:11.5px">T2 18/8, T5 21/8</span></span><span class="pt minus">−10</span></div>
+          <div class="row"><span class="code">H02</span><span class="nm">Không làm bài tập về nhà<br><span style="color:var(--ink-3);font-size:11.5px">T4 20/8 · tiết 3</span></span><span class="pt minus">−10</span></div>
+          <div class="row"><span class="code">V03</span><span class="nm">Trực nhật không đầy đủ<br><span style="color:var(--ink-3);font-size:11.5px">T6 22/8</span></span><span class="pt minus">−5</span></div>
+        </div>
+
+        <div class="tight" style="border-top:1px solid var(--line)">
+          <div class="sec-t">Điểm cộng trong tuần</div>
+          <div class="row"><span class="code">C01</span><span class="nm">Phát biểu xây dựng bài · 2 lần</span><span class="pt plus">+4</span></div>
+          <div class="row"><span class="code">C05</span><span class="nm">Lao động, vệ sinh tự nguyện</span><span class="pt plus">+5</span></div>
+        </div>
+
+        <div class="tight" style="border-top:1px solid var(--line);position:relative">
+          <span class="callout" style="left:-20px;top:22px">4</span>
+          <div class="sec-t">Việc cần khắc phục</div>
+          <div class="row"><span class="nm">Trực nhật bổ sung 1 ngày <br><span style="color:var(--ink-3);font-size:11.5px">Hạn: T3 26/8</span></span><span class="stamp wait">chưa xong</span></div>
+        </div>
+
+        <div class="pad" style="border-top:1px solid var(--line);position:relative">
+          <span class="callout" style="left:-20px;top:18px">5</span>
+          <p style="font-size:11.5px;color:var(--ink-3);text-align:center">
+            Có thắc mắc, phụ huynh liên hệ GVCN lớp 9/1.<br>Báo cáo phát hành CN 24/8, đã được GVCN xác nhận.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Chú giải</h3>
+      <div class="note q"><span class="mark">1</span><p><span class="tag">Q1</span>Nếu điểm cộng không có trần, một em có thể đạt 180 điểm và luôn đứng đầu lớp. Cho GVCN xem đúng ô số này với ba kịch bản trần khác nhau để họ chọn.</p></div>
+      <div class="note"><span class="mark">2</span><p>Biểu đồ 12 tuần cho phụ huynh thấy <b>xu hướng</b> chứ không chỉ một con số. Một tuần xấu trong chuỗi tốt đọc rất khác một tuần xấu trong chuỗi đang tuột dốc.</p></div>
+      <div class="note"><span class="mark">3</span><p>Cảnh báo trước khi bị hạ bậc là phần có giá trị nhất với phụ huynh. Nó biến báo cáo từ bản phán quyết thành lời nhắc còn kịp sửa.</p></div>
+      <div class="note"><span class="mark">4</span><p>Việc cần khắc phục hiện ra ở đây thì phụ huynh mới nhắc con được. Đây là thứ sổ giấy không làm được.</p></div>
+      <div class="note"><span class="mark">5</span><p><b>Không hiển thị</b>: tên học sinh khác, bảng xếp hạng cả lớp, và tên người ghi lỗi. Việc ẩn người ghi tránh mâu thuẫn giữa các em và giữa phụ huynh với nhau.</p></div>
+      <div class="note"><span class="mark">6</span><p>Trước màn này là bước nhập <b>mã 6 số</b>. Sai 5 lần thì khoá 30 phút.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 04 ============================ -->
+<section class="panel" id="p4" role="tabpanel">
+  <div class="panel-head">
+    <div class="who">Ban giám hiệu · chỉ đọc</div>
+    <h2>Tổng quan toàn trường</h2>
+    <p>BGH không cần xem từng lỗi. Họ cần biết lớp nào chưa chốt được tuần, và tỉ lệ xếp loại giữa các lớp có bất thường không.</p>
+  </div>
+
+  <div class="split">
+    <div class="device">
+      <div class="bar">
+        <div><div class="t">Toàn trường · Tuần 12</div><div class="s">Năm học 2026–2027 · học kỳ 1 · 62 lớp</div></div>
+        <span class="btn sm ghost">Xuất Excel</span>
+      </div>
+
+      <div class="tight" style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="chip on">Tất cả khối</span><span class="chip">Khối 6</span>
+        <span class="chip">Khối 7</span><span class="chip">Khối 8</span><span class="chip">Khối 9</span>
+      </div>
+
+      <div class="pad" style="position:relative">
+        <span class="callout" style="left:6px;top:2px">1</span>
+        <div class="kpi">
+          <div><div class="lb">Điểm trung bình toàn trường</div><div class="vl">84,2</div></div>
+          <div><div class="lb">Lớp chưa chốt tuần</div><div class="vl" style="color:var(--no)">7</div></div>
+          <div><div class="lb">Bản ghi chờ duyệt</div><div class="vl" style="color:var(--wait)">213</div></div>
+          <div><div class="lb">HS bị hạ bậc kỳ này</div><div class="vl">31</div></div>
+        </div>
+      </div>
+
+      <div class="tight" style="position:relative">
+        <span class="callout" style="left:-6px;top:20px">2</span>
+        <div class="banner alert">7 lớp chưa chốt được tuần 12 vì còn bản ghi chờ GVCN duyệt. Hạn cuối: <b>12:00 thứ Hai 25/8</b>.</div>
+      </div>
+
+      <div class="tight">
+        <div class="sec-t">Tỉ lệ xếp loại theo lớp</div>
+        <div class="scroller"><table>
+          <thead><tr>
+            <th>Lớp</th><th>GVCN</th><th class="num">TB điểm</th>
+            <th style="min-width:160px">Phân bố xếp loại</th>
+            <th class="num">Chờ duyệt</th><th>Tuần 12</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><b>9/1</b></td><td>Cô Lan</td><td class="num">86,4</td>
+              <td><div class="stack"><i style="width:58%;background:#2F7A56"></i><i style="width:31%;background:#3B6FB0"></i><i style="width:9%;background:#B08400"></i><i style="width:2%;background:#B3453E"></i></div></td>
+              <td class="num">0</td><td><span class="stamp ok">đã chốt</span></td></tr>
+            <tr><td><b>9/2</b></td><td>Thầy Hải</td><td class="num">81,0</td>
+              <td><div class="stack"><i style="width:44%;background:#2F7A56"></i><i style="width:38%;background:#3B6FB0"></i><i style="width:14%;background:#B08400"></i><i style="width:4%;background:#B3453E"></i></div></td>
+              <td class="num">0</td><td><span class="stamp ok">đã chốt</span></td></tr>
+            <tr class="flag"><td><b>9/3</b></td><td>Cô Thảo</td><td class="num">—</td>
+              <td><div class="stack"><i style="width:100%;background:var(--fill)"></i></div></td>
+              <td class="num" style="color:var(--no);font-weight:700">42</td><td><span class="stamp no">chưa chốt</span></td></tr>
+            <tr><td><b>8/1</b></td><td>Thầy Nam</td><td class="num">88,9</td>
+              <td><div class="stack"><i style="width:69%;background:#2F7A56"></i><i style="width:24%;background:#3B6FB0"></i><i style="width:7%;background:#B08400"></i></div></td>
+              <td class="num">0</td><td><span class="stamp ok">đã chốt</span></td></tr>
+            <tr class="flag"><td><b>8/2</b></td><td>Cô Vy</td><td class="num">97,8</td>
+              <td><div class="stack"><i style="width:96%;background:#2F7A56"></i><i style="width:4%;background:#3B6FB0"></i></div></td>
+              <td class="num">0</td><td><span class="stamp ok">đã chốt</span></td></tr>
+            <tr><td colspan="6" style="color:var(--ink-3);text-align:center">…57 lớp còn lại</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="tight" style="border-top:1px solid var(--line);position:relative">
+        <span class="callout" style="left:-6px;top:20px">3</span>
+        <div class="sec-t">Cần chú ý</div>
+        <div class="row"><span class="nm"><b>Lớp 8/2</b> · 96% xếp Tốt, cao bất thường so với trung bình khối (61%)</span><span class="stamp wait">kiểm tra</span></div>
+        <div class="row"><span class="nm"><b>Lớp 7/4</b> · không có bản ghi nào trong 3 ngày liên tiếp</span><span class="stamp wait">kiểm tra</span></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>Chú giải</h3>
+      <div class="note"><span class="mark">1</span><p>Chỉ số quan trọng nhất với BGH không phải điểm trung bình mà là <b>số lớp chưa chốt tuần</b> — đó là chỉ số vận hành duy nhất họ can thiệp được.</p></div>
+      <div class="note"><span class="mark">2</span><p>Dòng cảnh báo dẫn thẳng tới danh sách 7 lớp và GVCN tương ứng. BGH cần biết nhắc ai, không cần con số.</p></div>
+      <div class="note"><span class="mark">3</span><p>Khối "Cần chú ý" phát hiện bất thường: lớp có tỉ lệ Tốt cao vượt trội, hoặc lớp nhiều ngày không ai nhập. Đây chính là yêu cầu <b>"kiểm tra bạn nào chưa được nhập lỗi"</b> nâng lên cấp trường.</p></div>
+      <div class="note q"><span class="mark">4</span><p><span class="tag">Q7</span>Bảng so sánh 62 lớp chỉ có nghĩa nếu <b>tất cả dùng chung một bảng điểm</b>. Nếu mỗi lớp một bảng riêng, cột "TB điểm" phải bỏ đi.</p></div>
+      <div class="note"><span class="mark">5</span><p>Toàn màn hình là chỉ đọc. BGH không sửa được lỗi của lớp nào — quyền đó thuộc GVCN, và mọi thay đổi đều vào nhật ký.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Bản vẽ dùng để thảo luận bố cục và luồng thao tác. Màu sắc, phông chữ và chi tiết đồ hoạ chưa phải thiết kế cuối.
+  Số liệu trong hình là dữ liệu giả.
+</footer>
+</div>
+
+<script>
+const tabs=[...document.querySelectorAll('nav.tabs button')];
+tabs.forEach(b=>b.addEventListener('click',()=>{
+  tabs.forEach(x=>x.setAttribute('aria-selected',String(x===b)));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===b.dataset.p));
+  window.scrollTo({top:0,behavior:'smooth'});
+}));
+</script>
+</body>
+</html>
