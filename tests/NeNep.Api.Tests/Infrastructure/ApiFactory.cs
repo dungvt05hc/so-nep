@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NeNep.Infrastructure;
 using NeNep.Infrastructure.Persistence;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace NeNep.Api.Tests.Infrastructure;
@@ -29,6 +30,16 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public string ConnectionString => _postgres.GetConnectionString();
 
+    /// <summary>
+    /// ONE data source for every context the tests build by hand. Each NpgsqlDataSource
+    /// carries its own connection pool, so creating one per context exhausts the server's
+    /// connection slots long before the suite finishes.
+    /// </summary>
+    private NpgsqlDataSource DataSource => _dataSource
+        ??= DependencyInjection.BuildDataSource(ConnectionString);
+
+    private NpgsqlDataSource? _dataSource;
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
@@ -43,6 +54,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public new async Task DisposeAsync()
     {
         await base.DisposeAsync();
+
+        if (_dataSource is not null)
+        {
+            await _dataSource.DisposeAsync();
+        }
+
         await _postgres.DisposeAsync();
     }
 
@@ -50,9 +67,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public NeNepDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<NeNepDbContext>()
-            .UseNpgsql(
-                DependencyInjection.BuildDataSource(ConnectionString),
-                DependencyInjection.ConfigureNpgsql)
+            .UseNpgsql(DataSource, DependencyInjection.ConfigureNpgsql)
             .UseSnakeCaseNamingConvention()
             .Options;
 

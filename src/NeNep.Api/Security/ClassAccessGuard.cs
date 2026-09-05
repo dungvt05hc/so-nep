@@ -14,11 +14,34 @@ public sealed record ClassScope(
     bool SchoolWideRead,
     bool SchoolWideWrite,
     IReadOnlySet<int> ReadableClassIds,
-    IReadOnlySet<int> WritableClassIds)
+    IReadOnlySet<int> WritableClassIds,
+    IReadOnlySet<Role> SchoolWideRoles,
+    IReadOnlyDictionary<int, IReadOnlySet<Role>> RolesByClass)
 {
     public bool CanRead(int classId) => SchoolWideRead || ReadableClassIds.Contains(classId);
 
     public bool CanWrite(int classId) => SchoolWideWrite || WritableClassIds.Contains(classId);
+
+    /// <summary>
+    /// The roles the caller actually holds INSIDE this class, school-wide roles included.
+    /// <para>
+    /// A person can be the homeroom teacher of 9/1 and nothing at all in 9/2, so
+    /// "is this caller a GVCN" is never a question that can be answered without naming
+    /// the class — which is exactly what the catalog's <c>allowed_roles</c> check needs.
+    /// </para>
+    /// </summary>
+    public IReadOnlySet<Role> RolesIn(int classId)
+    {
+        if (!RolesByClass.TryGetValue(classId, out var roles))
+        {
+            return SchoolWideRoles;
+        }
+
+        var combined = new HashSet<Role>(roles);
+        combined.UnionWith(SchoolWideRoles);
+
+        return combined;
+    }
 
     /// <summary>
     /// The class ids a listing must be narrowed to, or <c>null</c> when the caller sees
@@ -87,11 +110,28 @@ public sealed class ClassAccessGuard : IClassAccessGuard
         }
     }
 
+    private static HashSet<Role> RolesOf(Dictionary<int, HashSet<Role>> byClass, int classId)
+    {
+        if (!byClass.TryGetValue(classId, out var roles))
+        {
+            roles = [];
+            byClass[classId] = roles;
+        }
+
+        return roles;
+    }
+
     private async Task<ClassScope> ResolveAsync(CancellationToken cancellationToken)
     {
         if (!_currentUser.IsAuthenticated)
         {
-            return new ClassScope(false, false, new HashSet<int>(), new HashSet<int>());
+            return new ClassScope(
+                false,
+                false,
+                new HashSet<int>(),
+                new HashSet<int>(),
+                new HashSet<Role>(),
+                new Dictionary<int, IReadOnlySet<Role>>());
         }
 
         var userId = _currentUser.UserId;
@@ -104,8 +144,14 @@ public sealed class ClassAccessGuard : IClassAccessGuard
         var schoolWideRead = roles.Any(r => RoleGroups.IsSchoolWide(r.Role));
         var schoolWideWrite = roles.Any(r => r.Role == Role.ADMIN);
 
+        var schoolWideRoles = roles
+            .Where(r => RoleGroups.IsSchoolWide(r.Role))
+            .Select(r => r.Role)
+            .ToHashSet();
+
         var readable = new HashSet<int>();
         var writable = new HashSet<int>();
+        var byClass = new Dictionary<int, HashSet<Role>>();
 
         foreach (var role in roles.Where(r => RoleGroups.IsClassScoped(r.Role) && r.ClassId is not null))
         {
@@ -113,6 +159,8 @@ public sealed class ClassAccessGuard : IClassAccessGuard
 
             // Class officers report into their own class; the homeroom teacher owns it.
             writable.Add(role.ClassId.Value);
+
+            RolesOf(byClass, role.ClassId.Value).Add(role.Role);
         }
 
         if (roles.Any(r => r.Role == Role.GVCN))
@@ -126,8 +174,19 @@ public sealed class ClassAccessGuard : IClassAccessGuard
 
             readable.UnionWith(homeroom);
             writable.UnionWith(homeroom);
+
+            foreach (var classId in homeroom)
+            {
+                RolesOf(byClass, classId).Add(Role.GVCN);
+            }
         }
 
-        return new ClassScope(schoolWideRead, schoolWideWrite, readable, writable);
+        return new ClassScope(
+            schoolWideRead,
+            schoolWideWrite,
+            readable,
+            writable,
+            schoolWideRoles,
+            byClass.ToDictionary(e => e.Key, e => (IReadOnlySet<Role>)e.Value));
     }
 }

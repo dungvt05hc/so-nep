@@ -1,6 +1,9 @@
 using NeNep.Api.Features.Accounts;
+using NeNep.Api.Features.Catalog;
 using NeNep.Api.Features.ClassOfficers;
+using NeNep.Api.Features.Reports;
 using NeNep.Api.Features.Students;
+using NeNep.Api.Features.Violations;
 
 namespace NeNep.Api.Features.Classes;
 
@@ -37,6 +40,21 @@ public static class ClassEndpoints
         ResetAccountPassword.Map(classes);
         SetAccountActive.Map(classes);
         RevokeAccount.Map(classes);
+
+        ListClassViolationTypes.Map(classes);
+        SetClassViolationOverride.Map(classes);
+
+        CreateViolation.Map(classes);
+        ListViolations.Map(classes);
+        UpdateViolation.Map(classes);
+        DeleteViolation.Map(classes);
+        ApproveViolations.MapSingle(classes);
+        ApproveViolations.MapBulk(classes);
+        RejectViolation.Map(classes);
+
+        ListDaysWithoutRecords.Map(classes);
+        ListStudentsWithoutRecords.Map(classes);
+        ListOverduePendingViolations.Map(classes);
 
         return app;
     }

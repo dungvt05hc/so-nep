@@ -42,6 +42,18 @@ public class ClassIsolationTests
         { "POST", "/api/classes/{classId}/accounts/{officerUserId}/lock", null },
         { "POST", "/api/classes/{classId}/accounts/{officerUserId}/unlock", null },
         { "DELETE", "/api/classes/{classId}/accounts/{officerUserId}", null },
+        { "GET", "/api/classes/{classId}/violation-types", null },
+        { "PUT", "/api/classes/{classId}/violation-types/1", """{"isEnabled":false}""" },
+        { "GET", "/api/classes/{classId}/violations", null },
+        { "POST", "/api/classes/{classId}/violations", """{"studentId":{studentId},"typeId":1,"occurredDate":"2026-09-07"}""" },
+        { "PUT", "/api/classes/{classId}/violations/1", """{"note":"x"}""" },
+        { "DELETE", "/api/classes/{classId}/violations/1", null },
+        { "POST", "/api/classes/{classId}/violations/1/approve", null },
+        { "POST", "/api/classes/{classId}/violations/approve", """{"ids":[1]}""" },
+        { "POST", "/api/classes/{classId}/violations/1/reject", """{"reason":"x"}""" },
+        { "GET", "/api/classes/{classId}/reports/days-without-records?weekId=1", null },
+        { "GET", "/api/classes/{classId}/reports/students-without-records?weekId=1", null },
+        { "GET", "/api/classes/{classId}/reports/overdue-pending", null },
     };
 
     [Theory]

@@ -1,7 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using NeNep.Domain.Abstractions;
 using NeNep.Domain.Entities;
 using NeNep.Domain.Enums;
@@ -22,12 +24,24 @@ namespace NeNep.Infrastructure.Persistence.Interceptors;
 /// RESET_PASSWORD, LOCK_WEEK, APPROVE...) declares it through <see cref="IAuditScope"/>
 /// instead of writing an audit row itself.
 /// </para>
+/// <para>
+/// TWO PHASES. What changed can only be read BEFORE the save, while the change tracker
+/// still holds the original values; but the id of a brand new row only exists AFTER it.
+/// So the trail is captured first and written afterwards, inside the same transaction —
+/// otherwise every CREATE row would point at the negative placeholder EF uses for a key
+/// it has not obtained yet, and the history of a record could never be looked up.
+/// </para>
 /// </summary>
 public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
+
+        // Enums are written as their LABEL ("APPROVED", "GVCN"), never as a number. The
+        // trail is read by people, and an ordinal would also start meaning something else
+        // the day a member is inserted into the enum.
+        Converters = { new JsonStringEnumConverter() },
     };
 
     /// <summary>
@@ -48,6 +62,13 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
     private readonly IAuditScope _auditScope;
     private readonly TimeProvider _timeProvider;
 
+    private readonly List<PendingAudit> _pending = [];
+
+    /// <summary>Set while this interceptor is saving the audit rows it just produced.</summary>
+    private bool _writingTrail;
+
+    private IDbContextTransaction? _ownedTransaction;
+
     public AuditSaveChangesInterceptor(
         IAuditContext auditContext,
         IAuditScope auditScope,
@@ -62,20 +83,135 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         DbContextEventData eventData,
         InterceptionResult<int> result)
     {
-        Audit(eventData.Context);
+        if (!_writingTrail)
+        {
+            Capture(eventData.Context);
+
+            if (_pending.Count > 0 && eventData.Context!.Database.CurrentTransaction is null)
+            {
+                _ownedTransaction = eventData.Context.Database.BeginTransaction();
+            }
+        }
+
         return base.SavingChanges(eventData, result);
     }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
-        Audit(eventData.Context);
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
+        if (!_writingTrail)
+        {
+            Capture(eventData.Context);
+
+            if (_pending.Count > 0 && eventData.Context!.Database.CurrentTransaction is null)
+            {
+                _ownedTransaction = await eventData.Context.Database
+                    .BeginTransactionAsync(cancellationToken);
+            }
+        }
+
+        return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private void Audit(DbContext? context)
+    public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
+    {
+        if (_writingTrail || _pending.Count == 0 || eventData.Context is null)
+        {
+            return base.SavedChanges(eventData, result);
+        }
+
+        var context = eventData.Context;
+
+        _writingTrail = true;
+
+        try
+        {
+            context.Set<AuditLog>().AddRange(TakePending());
+
+            context.SaveChanges();
+
+            _ownedTransaction?.Commit();
+        }
+        finally
+        {
+            _writingTrail = false;
+
+            ReleaseTransaction();
+        }
+
+        return base.SavedChanges(eventData, result);
+    }
+
+    public override async ValueTask<int> SavedChangesAsync(
+        SaveChangesCompletedEventData eventData,
+        int result,
+        CancellationToken cancellationToken = default)
+    {
+        if (_writingTrail || _pending.Count == 0 || eventData.Context is null)
+        {
+            return await base.SavedChangesAsync(eventData, result, cancellationToken);
+        }
+
+        var context = eventData.Context;
+
+        _writingTrail = true;
+
+        try
+        {
+            context.Set<AuditLog>().AddRange(TakePending());
+
+            await context.SaveChangesAsync(cancellationToken);
+
+            if (_ownedTransaction is not null)
+            {
+                await _ownedTransaction.CommitAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            _writingTrail = false;
+
+            await ReleaseTransactionAsync();
+        }
+
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
+    }
+
+    /// <summary>A failed write leaves no trail, and takes the transaction down with it.</summary>
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+        _pending.Clear();
+
+        _ownedTransaction?.Rollback();
+
+        ReleaseTransaction();
+
+        base.SaveChangesFailed(eventData);
+    }
+
+    public override async Task SaveChangesFailedAsync(
+        DbContextErrorEventData eventData,
+        CancellationToken cancellationToken = default)
+    {
+        _pending.Clear();
+
+        if (_ownedTransaction is not null)
+        {
+            await _ownedTransaction.RollbackAsync(cancellationToken);
+        }
+
+        await ReleaseTransactionAsync();
+
+        await base.SaveChangesFailedAsync(eventData, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads what is about to change, while the change tracker still knows both sides of
+    /// it. Nothing is written here.
+    /// </summary>
+    private void Capture(DbContext? context)
     {
         if (context is null)
         {
@@ -85,13 +221,13 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         context.ChangeTracker.DetectChanges();
 
         var now = _timeProvider.GetUtcNow();
-        var logs = new List<AuditLog>();
 
         foreach (var entry in context.ChangeTracker.Entries().ToList())
         {
             if (entry.Entity is AuditLog)
             {
                 GuardAppendOnly(entry);
+
                 continue;
             }
 
@@ -100,12 +236,7 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 continue;
             }
 
-            logs.Add(BuildLog(entry, now));
-        }
-
-        if (logs.Count > 0)
-        {
-            context.Set<AuditLog>().AddRange(logs);
+            _pending.Add(Describe(entry, now));
         }
     }
 
@@ -122,25 +253,70 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         }
     }
 
-    private AuditLog BuildLog(EntityEntry entry, DateTimeOffset now)
+    private PendingAudit Describe(EntityEntry entry, DateTimeOffset now)
     {
         var tagged = _auditScope.TryGet(entry.Entity, out var tag);
+        var isInsert = entry.State == EntityState.Added;
 
-        return new AuditLog
+        return new PendingAudit
         {
-            ActorId = _auditContext.ActorId,
-            ActorRole = _auditContext.ActorRole,
-            Action = tagged ? tag.Action : ResolveAction(entry),
-            Summary = tagged ? tag.Summary : null,
-            Entity = entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name,
-            EntityId = ResolveEntityId(entry),
-            ClassId = ResolveClassId(entry),
-            BeforeJson = entry.State == EntityState.Added ? null : Snapshot(entry, original: true),
-            AfterJson = entry.State == EntityState.Deleted ? null : Snapshot(entry, original: false),
-            Ip = _auditContext.Ip,
-            UserAgent = _auditContext.UserAgent,
-            CreatedAt = now,
+            Entry = entry,
+            IsInsert = isInsert,
+            Log = new AuditLog
+            {
+                ActorId = _auditContext.ActorId,
+                ActorRole = _auditContext.ActorRole,
+                Action = tagged ? tag.Action : ResolveAction(entry),
+                Summary = tagged ? tag.Summary : null,
+                Entity = entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name,
+
+                // A row being inserted has no id yet, and no class id either when the
+                // caller set the class through a navigation. Both are read after the save.
+                EntityId = isInsert ? null : ResolveEntityId(entry),
+                ClassId = isInsert ? null : ResolveClassId(entry),
+                BeforeJson = isInsert ? null : Snapshot(entry, original: true),
+                AfterJson = entry.State == EntityState.Deleted ? null : Snapshot(entry, original: false),
+                Ip = _auditContext.Ip,
+                UserAgent = _auditContext.UserAgent,
+                CreatedAt = now,
+            },
         };
+    }
+
+    /// <summary>Fills in what only became known once the database had assigned the keys.</summary>
+    private List<AuditLog> TakePending()
+    {
+        var logs = new List<AuditLog>(_pending.Count);
+
+        foreach (var pending in _pending)
+        {
+            if (pending.IsInsert)
+            {
+                pending.Log.EntityId = ResolveEntityId(pending.Entry);
+                pending.Log.ClassId = ResolveClassId(pending.Entry);
+            }
+
+            logs.Add(pending.Log);
+        }
+
+        _pending.Clear();
+
+        return logs;
+    }
+
+    private void ReleaseTransaction()
+    {
+        _ownedTransaction?.Dispose();
+        _ownedTransaction = null;
+    }
+
+    private async ValueTask ReleaseTransactionAsync()
+    {
+        if (_ownedTransaction is not null)
+        {
+            await _ownedTransaction.DisposeAsync();
+            _ownedTransaction = null;
+        }
     }
 
     /// <summary>
@@ -223,5 +399,15 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
         }
 
         return JsonSerializer.SerializeToDocument(values, JsonOptions);
+    }
+
+    /// <summary>An audit row that has been described but cannot be written yet.</summary>
+    private sealed class PendingAudit
+    {
+        public required EntityEntry Entry { get; init; }
+
+        public required bool IsInsert { get; init; }
+
+        public required AuditLog Log { get; init; }
     }
 }

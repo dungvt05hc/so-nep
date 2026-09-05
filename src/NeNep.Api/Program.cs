@@ -2,7 +2,9 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using NeNep.Api.Common;
 using NeNep.Api.Features.AcademicYears;
+using NeNep.Api.Features.AuditLogs;
 using NeNep.Api.Features.Auth;
+using NeNep.Api.Features.Catalog;
 using NeNep.Api.Features.Classes;
 using NeNep.Api.Features.Grades;
 using NeNep.Api.Features.Setup;
@@ -25,6 +27,7 @@ builder.Services.AddNeNepInfrastructure(connectionString);
 builder.Services.AddNeNepAuth(builder.Configuration);
 
 builder.Services.AddScoped<ISessionManager, SessionManager>();
+builder.Services.AddScoped<ISchoolSettings, SchoolSettingsAccessor>();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>(includeInternalTypes: true);
 
 // Enums travel as their labels ("GVCN", "LOCKED"), never as ordinals: the labels are the
@@ -59,6 +62,11 @@ app.MapAcademicYearEndpoints();
 app.MapGradeEndpoints();
 app.MapClassEndpoints();
 app.MapStudentEndpoints();
+app.MapCatalogEndpoints();
+app.MapAuditLogEndpoints();
+
+// The catalog is reference data, so it is loaded before the first account exists.
+await app.SeedCatalogAsync();
 
 await app.EnsureBootstrapAdminAsync();
 

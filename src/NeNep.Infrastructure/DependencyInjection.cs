@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using NeNep.Infrastructure.Auditing;
 using NeNep.Infrastructure.Persistence;
 using NeNep.Infrastructure.Persistence.Interceptors;
+using NeNep.Infrastructure.Persistence.Seeding;
 using NeNep.Infrastructure.Security;
 using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
@@ -33,6 +34,8 @@ public static class DependencyInjection
         services.TryAddScoped<IAuditScope, AuditScope>();
 
         services.TryAddSingleton<IPasswordService, PasswordService>();
+
+        services.AddScoped<CatalogSeeder>();
 
         services.AddScoped<TimestampInterceptor>();
         services.AddScoped<AuditSaveChangesInterceptor>();
